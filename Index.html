@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>EaglercraftX 1.8.8 + Touch Controls</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+      font-family: sans-serif;
+    }
+    #game_frame {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    /* Touch Controls UI Overlay */
+    #touch-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 9999;
+      pointer-events: none;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Virtual D-Pad */
+    #dpad-zone {
+      position: absolute;
+      bottom: 25px;
+      left: 25px;
+      width: 160px;
+      height: 160px;
+      pointer-events: auto;
+    }
+    .dpad-btn {
+      position: absolute;
+      width: 48px;
+      height: 48px;
+      background: rgba(255, 255, 255, 0.22);
+      border: 2px solid rgba(255, 255, 255, 0.45);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: bold;
+      font-size: 18px;
+    }
+    .dpad-btn:active {
+      background: rgba(255, 255, 255, 0.55);
+    }
+    #btn-up    { top: 0; left: 56px; }
+    #btn-down  { bottom: 0; left: 56px; }
+    #btn-left  { top: 56px; left: 0; }
+    #btn-right { top: 56px; right: 0; }
+    #btn-center{ top: 56px; left: 56px; border-radius: 50%; width: 44px; height: 44px; font-size: 10px; }
+
+    /* Action Buttons (Right Side) */
+    #action-zone {
+      position: absolute;
+      bottom: 25px;
+      right: 25px;
+      width: 170px;
+      height: 170px;
+      pointer-events: auto;
+    }
+    .action-btn {
+      position: absolute;
+      width: 56px;
+      height: 56px;
+      background: rgba(255, 255, 255, 0.22);
+      border: 2px solid rgba(255, 255, 255, 0.45);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 13px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .action-btn:active {
+      background: rgba(255, 255, 255, 0.55);
+    }
+    #btn-jump   { bottom: 10px; right: 60px; }
+    #btn-break  { top: 10px; right: 90px; }
+    #btn-place  { top: 10px; right: 15px; }
+
+    /* Central touch look surface */
+    #touch-look-zone {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 60%;
+      height: 70%;
+      pointer-events: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Eaglercraft Container -->
+  <div id="game_frame"></div>
+
+  <!-- Touch Overlay -->
+  <div id="touch-overlay">
+    <!-- D-Pad for Movement -->
+    <div id="dpad-zone">
+      <div class="dpad-btn" id="btn-up">&#9650;</div>
+      <div class="dpad-btn" id="btn-left">&#9664;</div>
+      <div class="dpad-btn" id="btn-center">SNEAK</div>
+      <div class="dpad-btn" id="btn-right">&#9654;</div>
+      <div class="dpad-btn" id="btn-down">&#9660;</div>
+    </div>
+
+    <!-- Look / Aim touch pad -->
+    <div id="touch-look-zone"></div>
+
+    <!-- Action buttons -->
+    <div id="action-zone">
+      <div class="action-btn" id="btn-break">MINE</div>
+      <div class="action-btn" id="btn-place">PLACE</div>
+      <div class="action-btn" id="btn-jump">JUMP</div>
+    </div>
+  </div>
+
+  <!-- Eaglercraft Official Client Configuration & Bootstrapper -->
+  <script type="text/javascript">
+    window.eaglercraftXOpts = {
+      container: "game_frame",
+      assetsURI: "https://cdn.jsdelivr.net/gh/Eaglercraft-Archive/EaglercraftX-1.8@main/assets.epk",
+      localesURI: "https://cdn.jsdelivr.net/gh/Eaglercraft-Archive/EaglercraftX-1.8@main/lang/",
+      servers: [
+        { addr: "wss://play.inpets.net", name: "Inpets Eagler" },
+        { addr: "wss://mc.arch.lol", name: "ArchMC" }
+      ]
+    };
+  </script>
+
+  <!-- Load TeaVM Runtime and Engine Classes -->
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/gh/Eaglercraft-Archive/EaglercraftX-1.8@main/classes.js"></script>
+
+  <!-- Synthetic Touch Event Mapping -->
+  <script type="text/javascript">
+    function sendKey(keyCode, keyName, state) {
+      const type = state ? 'keydown' : 'keyup';
+      const evt = new KeyboardEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        code: keyCode,
+        key: keyName,
+        keyCode: getLegacyCode(keyCode),
+        which: getLegacyCode(keyCode)
+      });
+      window.dispatchEvent(evt);
+      document.dispatchEvent(evt);
+      const canvas = document.querySelector("#game_frame canvas");
+      if (canvas) canvas.dispatchEvent(evt);
+    }
+
+    function getLegacyCode(code) {
+      switch(code) {
+        case 'KeyW': return 87;
+        case 'KeyS': return 83;
+        case 'KeyA': return 65;
+        case 'KeyD': return 68;
+        case 'Space': return 32;
+        case 'ShiftLeft': return 16;
+        default: return 0;
+      }
+    }
+
+    function bindKeyTouch(elementId, keyCode, keyName) {
+      const btn = document.getElementById(elementId);
+      if (!btn) return;
+      btn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        sendKey(keyCode, keyName, true);
+      });
+      btn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        sendKey(keyCode, keyName, false);
+      });
+      btn.addEventListener('touchcancel', (e) => {
+        e.preventDefault();
+        sendKey(keyCode, keyName, false);
+      });
+    }
+
+    // Bind Movement
+    bindKeyTouch('btn-up', 'KeyW', 'w');
+    bindKeyTouch('btn-down', 'KeyS', 's');
+    bindKeyTouch('btn-left', 'KeyA', 'a');
+    bindKeyTouch('btn-right', 'KeyD', 'd');
+    bindKeyTouch('btn-jump', 'Space', ' ');
+    bindKeyTouch('btn-center', 'ShiftLeft', 'Shift');
+
+    // Synthetic Mouse Clicks for Mine/Place
+    function sendMouse(button, state) {
+      const canvas = document.querySelector("#game_frame canvas") || document.body;
+      const type = state ? 'mousedown' : 'mouseup';
+      const evt = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        button: button,
+        buttons: state ? (button === 0 ? 1 : 2) : 0
+      });
+      canvas.dispatchEvent(evt);
+    }
+
+    function bindMouseTouch(elementId, buttonIndex) {
+      const btn = document.getElementById(elementId);
+      if (!btn) return;
+      btn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        sendMouse(buttonIndex, true);
+      });
+      btn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        sendMouse(buttonIndex, false);
+      });
+      btn.addEventListener('touchcancel', (e) => {
+        e.preventDefault();
+        sendMouse(buttonIndex, false);
+      });
+    }
+
+    bindMouseTouch('btn-break', 0); // Left Click = Mine
+    bindMouseTouch('btn-place', 2); // Right Click = Place
+
+    // Swipe-to-Look Handler (Emulates PointerLock mouse movement)
+    const lookZone = document.getElementById('touch-look-zone');
+    let lastTouchX = 0;
+    let lastTouchY = 0;
+    let isTrackingLook = false;
+
+    lookZone.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      lastTouchX = t.clientX;
+      lastTouchY = t.clientY;
+      isTrackingLook = true;
+    });
+
+    lookZone.addEventListener('touchmove', (e) => {
+      if (!isTrackingLook) return;
+      const t = e.touches[0];
+      const deltaX = (t.clientX - lastTouchX) * 1.5;
+      const deltaY = (t.clientY - lastTouchY) * 1.5;
+      lastTouchX = t.clientX;
+      lastTouchY = t.clientY;
+
+      const canvas = document.querySelector("#game_frame canvas") || window;
+      const moveEvt = new MouseEvent('mousemove', {
+        bubbles: true,
+        cancelable: true,
+        clientX: t.clientX,
+        clientY: t.clientY,
+        movementX: deltaX,
+        movementY: deltaY
+      });
+      canvas.dispatchEvent(moveEvt);
+    });
+
+    lookZone.addEventListener('touchend', () => { isTrackingLook = false; });
+    lookZone.addEventListener('touchcancel', () => { isTrackingLook = false; });
+  </script>
+</body>
+</html>
